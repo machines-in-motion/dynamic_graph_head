@@ -85,7 +85,7 @@ class ThreadHead(threading.Thread):
         except:
             traceback.print_exc()
             print('!!! ThreadHead: Error during controller warmup & run -> Switching to safety controller.')
-            self.active_controllers = safety_controllers
+            self.active_controllers = self.safety_controllers
 
             for ctrl in self.active_controllers:
                 ctrl.warmup(self)

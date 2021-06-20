@@ -6,7 +6,12 @@ Copyright note valid unless otherwise stated in individual files.
 All rights reserved.
 """
 
+# The main dynamic_graph_head infrastructure.
 from .sim_head import SimHead
 from .thread_head import ThreadHead
 
-from .vicon import Vicon, SimVicion
+# Sensors.
+from .vicon import Vicon, SimVicon
+
+# Basic controllers.
+from .controllers import ZeroTorquesController, HoldPDController
