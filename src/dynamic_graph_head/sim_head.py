@@ -9,7 +9,7 @@ All rights reserved.
 import numpy as np
 
 class SimHead:
-    def __init__(self, robot, vicon_name=''):
+    def __init__(self, robot, vicon_name='', with_sliders=True):
         self._robot = robot
 
         self._vicon_name = vicon_name
@@ -25,7 +25,10 @@ class SimHead:
 
         self._sensor_joint_positions = np.zeros(nj)
         self._sensor_joint_velocities = np.zeros(nj)
-        self._sensor_slider_positions = np.zeros(4)
+
+        self.with_sliders = with_sliders
+        if self.with_sliders:
+            self._sensor_slider_positions = np.zeros(4)
 
         # If not fixed base, then assume we have an IMU and a vicon.
         if not robot.useFixedBase:
@@ -49,6 +52,10 @@ class SimHead:
 
         self._sensor__vicon_base_position[:] = q[:7]
         self._sensor__vicon_base_velocity[:] = dq[:6]
+
+        if self.with_sliders:
+            for i, l in enumerate(['a', 'b', 'c', 'd']):
+                self._sensor_slider_positions[i] = self._robot.get_slider_position(l)
 
         # TODO: Add noise and delay model.
 
