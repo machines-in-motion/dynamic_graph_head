@@ -53,6 +53,11 @@ class ThreadHead(threading.Thread):
         self.ws_thread = threading.Thread(target=self.ws_thread_fn)
         self.ws_thread.start()
 
+        # Read data from the heads / shared memory to have it available for the
+        # initial utils and safety-controller run.
+        for head in self.heads.values():
+            head.read()
+
         # Run the utils once to make sure the data is available for
         # the safety controller.
         for (name, util) in self.utils:

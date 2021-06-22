@@ -70,10 +70,9 @@ if has_real_vicon:
                     'bias': np.zeros(3)
                 }
 
-            self.bias_xy = np.zeros(2)
-            self.bias_z = 0.
+                print('Vicon: Tracking object', object)
 
-        def read(self):
+        def update(self, thread_head):
             for object, data in self.object_data.items():
                 self.client.get_vicon_frame(object, data['frame'])
 
@@ -82,7 +81,7 @@ if has_real_vicon:
 
             pos = data['frame'].se3_pose.copy()
             pos[:3] -= data['bias']
-            return pos, self.frame.velocity_body_frame.copy()
+            return pos, data['frame'].velocity_body_frame.copy()
 
         def bias_position(self, vicon_object):
             data = self.object_data[vicon_object]
