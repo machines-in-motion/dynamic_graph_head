@@ -186,7 +186,7 @@ class ThreadHead(threading.Thread):
             return
 
         dl = self.data_logger
-        dl.begin_timestamp()
+        dl.begin_timestep()
         for name, meta in self.fields_access.items():
             dl.log_array(meta['log_id'], meta['ctrl'].__dict__[meta['key']])
         dl.end_timestep()
