@@ -131,19 +131,25 @@ class ThreadHead(threading.Thread):
         for i, ctrl in enumerate(self.active_controllers):
             ctrl_dict = ctrl.__dict__
             for key, value in ctrl_dict.items():
-                # Support only single-dim numpy arrays for now.
-                if type(value) == np.ndarray and value.ndim == 1:
+                # Support only single-dim numpy arrays and scalar only.
+                if type(value) == float or type(value) == int:
+                    field_size = 1
+                elif type(value) == np.ndarray and value.ndim == 1:
                     field_size = value.shape[0]
-                    if len(self.active_controllers) == 1:
-                        name = key
-                    else:
-                        name = 'ctrl%02d.%s' % (i, key)
-                    fields.append(name)
-                    fields_access[name] = {
-                        'ctrl': ctrl,
-                        'key': key,
-                        'size': field_size
-                    }
+                else:
+                    # Field type not supported.
+                    continue
+
+                if len(self.active_controllers) == 1:
+                    name = key
+                else:
+                    name = 'ctrl%02d.%s' % (i, key)
+                fields.append(name)
+                fields_access[name] = {
+                    'ctrl': ctrl,
+                    'key': key,
+                    'size': field_size
+                }
 
         self.fields = fields
         self.fields_access = fields_access
@@ -184,7 +190,8 @@ class ThreadHead(threading.Thread):
         for name, meta in self.fields_access.items():
             meta['log_id'] = self.data_logger.add_field(name, meta['size'])
 
-        print('!!! ThreadHead: Start logging to file "%s".' % (self.data_logger.filepath))
+        print('!!! ThreadHead: Start logging to file "%s" for %0.2f seconds.' % (
+            self.data_logger.filepath, log_duration_s))
 
     def log_data(self):
         if not self.logging:
@@ -193,7 +200,7 @@ class ThreadHead(threading.Thread):
         dl = self.data_logger
         dl.begin_timestep()
         for name, meta in self.fields_access.items():
-            dl.log_array(meta['log_id'], meta['ctrl'].__dict__[meta['key']])
+            dl.log(meta['log_id'], meta['ctrl'].__dict__[meta['key']])
         dl.end_timestep()
 
         if dl.file_index >= self.log_duration_ms:
