@@ -105,9 +105,13 @@ class ThreadHead(threading.Thread):
                 data['time'] = self.ti / 1000.
 
                 for name, value in self.fields_access.items():
-                    arr = value['ctrl'].__dict__[value['key']]
-                    type_str = 'd' if arr.dtype == np.float64 else 'f'
-                    data[name] = str(array.array(type_str, arr.data))
+                    val = value['ctrl'].__dict__[value['key']]
+                    if type(val) == np.ndarray and val.ndim == 1:
+                        type_str = 'd' if val.dtype == np.float64 else 'f'
+                        data[name] = str(array.array(type_str, val.data))
+                    else:
+                        # Fake sending data as an array to the client.
+                        data[name] = "array('d', [" + str(val) + "])"
 
                 streaming_json_data = json.dumps(data)
 
@@ -137,7 +141,8 @@ class ThreadHead(threading.Thread):
                 elif type(value) == np.ndarray and value.ndim == 1:
                     field_size = value.shape[0]
                 else:
-                    # Field type not supported.
+                    print("  Not logging '%s' as field type '%s' is unsupported" % (
+                        key, str(type(value))))
                     continue
 
                 if len(self.active_controllers) == 1:
