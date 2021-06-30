@@ -43,6 +43,7 @@ class ThreadHead(threading.Thread):
         self.streaming = False
         self.streaming_event_loop = None
         self.logging = False
+        self.log_writing = False
 
         self.timing_N = 5000
         self.timing_control = np.zeros(self.timing_N)
@@ -202,11 +203,15 @@ class ThreadHead(threading.Thread):
         if not self.logging:
             return
 
+        # Indicate that writing is happening to the file and that the file
+        # should not be clsoed right now.
+        self.log_writing = True
         dl = self.data_logger
         dl.begin_timestep()
         for name, meta in self.fields_access.items():
             dl.log(meta['log_id'], meta['ctrl'].__dict__[meta['key']])
         dl.end_timestep()
+        self.log_writing = False
 
         if dl.file_index >= self.log_duration_ms:
             self.stop_logging()
@@ -216,6 +221,12 @@ class ThreadHead(threading.Thread):
             return
 
         self.logging = False
+
+        # If there are logs written to the fiel right now, wait a bit to finish
+        # the current logging iteration.
+        if self.log_writing:
+            time.sleep(0.1)
+
         self.data_logger.close_file()
         print('!!! ThreadHead: Stop logging to file "%s".' % (self.data_logger.filepath))
 
