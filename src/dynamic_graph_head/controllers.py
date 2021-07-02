@@ -65,15 +65,15 @@ class HoldPDController:
             sliders_out[3] *= -1
             sliders_out[9] *= -1
 
-        elif self.joint_positions.shape[0] == 12:  #  solo8
+        elif self.joint_positions.shape[0] == 8:  #  solo8
             slider_A = sliders[0]
             for i in range(4):
                 sliders_out[2 * i + 0] = slider_A
                 sliders_out[2 * i + 2] = 2. * (1. - slider_A)
 
                 if i >= 2:
-                    sliders_out[3 * i + 1] *= -1
-                    sliders_out[3 * i + 2] *= -1
+                    sliders_out[2 * i + 0] *= -1
+                    sliders_out[2 * i + 1] *= -1
         return sliders_out
 
     def run(self, thread_head):
