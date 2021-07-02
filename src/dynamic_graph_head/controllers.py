@@ -52,10 +52,11 @@ class HoldPDController:
         sliders_out = np.zeros_like(self.joint_positions)
         if self.joint_positions.shape[0] == 12:  # solo12
             slider_A = sliders[0]
+            slider_B = sliders[1]
             for i in range(4):
                 sliders_out[3 * i + 0] = slider_A
-                sliders_out[3 * i + 1] = slider_A
-                sliders_out[3 * i + 2] = 2. * (1. - slider_A)
+                sliders_out[3 * i + 1] = slider_B
+                sliders_out[3 * i + 2] = 2. * (1. - slider_B)
 
                 if i >= 2:
                     sliders_out[3 * i + 1] *= -1
