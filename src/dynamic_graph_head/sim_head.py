@@ -9,17 +9,20 @@ All rights reserved.
 import numpy as np
 
 class SimHead:
-    def __init__(self, robot, vicon_name='', with_sliders=True):
+    def __init__(self, robot, vicon_name='', with_sliders=True, joint_index=None):
         self._robot = robot
-
-        self._vicon_name = vicon_name
+        self._vicon_name = vicon_name        
+        self._joint_index = joint_index
 
         # Define the common sensor values.
         nv = robot.pin_robot.model.nv
 
         # Get number of joints nj
         if robot.useFixedBase:
-            nj = nv
+            if joint_index is None:
+                nj = nv
+            else:
+                nj = len(joint_index)
         else:
             nj = nv - 6
 
@@ -42,16 +45,26 @@ class SimHead:
         # Controls.
         self._control_ctrl_joint_torques = np.zeros(nj)
 
+
     def read(self):
         q, dq = self._robot.get_state()
 
-        self._sensor_joint_positions[:] = q[7:]
-        self._sensor_joint_velocities[:] = dq[6:]
+        if not self._robot.useFixedBase:
+            self._sensor_joint_positions[:] = q[7:]
+            self._sensor_joint_velocities[:] = dq[6:]
 
-        self._sensor_imu_gyroscope[:] = dq[3:6].copy()
+            self._sensor_imu_gyroscope[:] = dq[3:6].copy()
 
-        self._sensor__vicon_base_position[:] = q[:7]
-        self._sensor__vicon_base_velocity[:] = dq[:6]
+            self._sensor__vicon_base_position[:] = q[:7]
+            self._sensor__vicon_base_velocity[:] = dq[:6]
+
+        else:
+            if self._joint_index:
+                self._sensor_joint_positions[:] = q[self._joint_index]
+                self._sensor_joint_velocities[:] = dq[self._joint_index]
+            else:
+                self._sensor_joint_positions[:] = q
+                self._sensor_joint_velocities[:] = dq            
 
         if self.with_sliders:
             for i, l in enumerate(['a', 'b', 'c', 'd']):
