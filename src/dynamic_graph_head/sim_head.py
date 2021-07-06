@@ -9,9 +9,10 @@ All rights reserved.
 import numpy as np
 
 class SimHead:
-    def __init__(self, robot, vicon_name='', with_sliders=True, joint_index=None):
+    def __init__(self, robot, vicon_name='', with_sliders=True, joint_index=None,
+                 measurement_delay_dt=0, control_delay_dt=0, noise_data_std={}):
         self._robot = robot
-        self._vicon_name = vicon_name        
+        self._vicon_name = vicon_name
         self._joint_index = joint_index
 
         # Define the common sensor values.
@@ -26,6 +27,8 @@ class SimHead:
         else:
             nj = nv - 6
 
+
+        self.nj = nj
         self._sensor_joint_positions = np.zeros(nj)
         self._sensor_joint_velocities = np.zeros(nj)
 
@@ -45,26 +48,79 @@ class SimHead:
         # Controls.
         self._control_ctrl_joint_torques = np.zeros(nj)
 
+        self.update_noise_data(noise_data_std)
+        self.update_control_delay(control_delay_dt)
+        self.update_measurement_delay(measurement_delay_dt)
+
+    def update_noise_data(self, noise_data_std):
+        self._noise_data_std = noise_data_std
+        if not 'joint_positions' in noise_data_std:
+            self._noise_data_std['joint_positions'] = np.zeros(self.nj)
+        if not 'joint_velocities' in noise_data_std:
+            self._noise_data_std['base_velocity'] = np.zeros(self.nj)
+        if not 'imu_gyroscope' in noise_data_std:
+            self._noise_data_std['imu_gyroscope'] = np.zeros(3)
+
+    def update_control_delay(self, delay_dt):
+        self._fill_history_control = True
+        self._ti = 0
+        self._control_delay_dt = delay_dt
+
+        length = delay_dt + 1
+
+        self._history_control = {
+            'ctrl_joint_torques': np.zeros((length, self.nj))
+        }
+
+    def update_measurement_delay(self, delay_dt):
+        self._fill_history_measurement = True
+        self._ti = 0
+        self._measurement_delay_dt = delay_dt
+
+        length = delay_dt + 1
+
+        self._history_measurements = {
+            'joint_positions': np.zeros((length, self.nj)),
+            'joint_velocities': np.zeros((length, self.nj)),
+
+            'imu_gyroscope': np.zeros((length, 3))
+        }
+
+    def sample_noise(self, entry):
+        noise_var = self._noise_data_std[entry]**2
+        return np.random.multivariate_normal(np.zeros_like(noise_var), np.diag(noise_var))
 
     def read(self):
         q, dq = self._robot.get_state()
 
-        if not self._robot.useFixedBase:
-            self._sensor_joint_positions[:] = q[7:]
-            self._sensor_joint_velocities[:] = dq[6:]
+        write_idx = self._ti % (self._measurement_delay_dt + 1)
+        if self._fill_history_measurement:
+            self._fill_history_measurement = False
+            write_idx = None
+        read_idx = (self._ti + 1) % (self._measurement_delay_dt + 1)
 
-            self._sensor_imu_gyroscope[:] = dq[3:6].copy()
+        history = self._history_measurements
+
+        if not self._robot.useFixedBase:
+            # Write to the measurement history with noise.
+            history['joint_positions'][write_idx] = q[7:]
+            history['joint_velocities'][write_idx] = dq[6:]
+            history['imu_gyroscope'][write_idx] = dq[3:6]
+
+            self._sensor_imu_gyroscope[:] = history['imu_gyroscope'][read_idx]
 
             self._sensor__vicon_base_position[:] = q[:7]
             self._sensor__vicon_base_velocity[:] = dq[:6]
-
         else:
             if self._joint_index:
-                self._sensor_joint_positions[:] = q[self._joint_index]
-                self._sensor_joint_velocities[:] = dq[self._joint_index]
+                history['joint_positions'][write_idx] = q[self._joint_index]
+                history['joint_velocities'][write_idx] = dq[self._joint_index]
             else:
-                self._sensor_joint_positions[:] = q
-                self._sensor_joint_velocities[:] = dq            
+                history['joint_positions'][write_idx] = q
+                history['joint_velocities'][write_idx] = dq
+
+        self._sensor_joint_positions[:] = history['joint_positions'][read_idx]
+        self._sensor_joint_velocities[:] = history['joint_velocities'][read_idx]
 
         if self.with_sliders:
             for i, l in enumerate(['a', 'b', 'c', 'd']):
@@ -73,7 +129,17 @@ class SimHead:
         # TODO: Add noise and delay model.
 
     def write(self):
-        self._robot.send_joint_command(self._control_ctrl_joint_torques)
+        write_idx = self._ti % (self._measurement_delay_dt + 1)
+        if self._fill_history_control:
+            self._fill_history_control = False
+            write_idx = None
+        read_idx = (self._ti + 1) % (self._measurement_delay_dt + 1)
+
+        history = self._history_control
+        history['ctrl_joint_torques'][write_idx] = self._control_ctrl_joint_torques
+
+        self._robot.send_joint_command(history['ctrl_joint_torques'][read_idx])
+        self._ti += 1
 
     def get_sensor(self, sensor_name):
         return self.__dict__['_sensor_' + sensor_name]
