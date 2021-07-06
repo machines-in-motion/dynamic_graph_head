@@ -184,7 +184,6 @@ class ThreadHead(threading.Thread):
         if self.logging:
             print('ThreadHead: Already logging data.')
             return
-        self.logging = True
         self.log_duration_ms = log_duration_s * 1000
 
         # If no logging yet, then setup the fields to log.
@@ -198,6 +197,7 @@ class ThreadHead(threading.Thread):
 
         print('!!! ThreadHead: Start logging to file "%s" for %0.2f seconds.' % (
             self.data_logger.filepath, log_duration_s))
+        self.logging = True
 
     def log_data(self):
         if not self.logging:
