@@ -45,7 +45,7 @@ class ThreadHead(threading.Thread):
         self.logging = False
         self.log_writing = False
 
-        self.timing_N = 5000
+        self.timing_N = 20000
         self.timing_control = np.zeros(self.timing_N)
         self.timing_utils = np.zeros(self.timing_N)
         self.timing_logging = np.zeros(self.timing_N)
@@ -245,6 +245,8 @@ class ThreadHead(threading.Thread):
             ax.set_title(title)
             ax.axhline(1., color='red')
 
+        plt.show()
+
     def run_main_loop(self, sleep=False):
         timing_N = self.timing_N
 
@@ -300,7 +302,8 @@ class ThreadHead(threading.Thread):
             if time.time() >= next_time:
                 next_time += self.dt
                 self.run_main_loop()
-            time.sleep(0.0001)
+            else:
+                time.sleep(0.0001)
 
     def sim_run(self, timesteps, sleep=False):
         """ Use this method to run the setup for `timesteps` amount of timesteps. """
