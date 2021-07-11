@@ -126,8 +126,6 @@ class SimHead:
             for i, l in enumerate(['a', 'b', 'c', 'd']):
                 self._sensor_slider_positions[i] = self._robot.get_slider_position(l)
 
-        # TODO: Add noise and delay model.
-
     def write(self):
         write_idx = self._ti % (self._measurement_delay_dt + 1)
         if self._fill_history_control:
@@ -138,8 +136,11 @@ class SimHead:
         history = self._history_control
         history['ctrl_joint_torques'][write_idx] = self._control_ctrl_joint_torques
 
-        self._robot.send_joint_command(history['ctrl_joint_torques'][read_idx])
+        self._last_ctrl_joint_torques = history['ctrl_joint_torques'][read_idx]
         self._ti += 1
+
+    def sim_step(self):
+        self._robot.send_joint_command(self._last_ctrl_joint_torques)
 
     def get_sensor(self, sensor_name):
         return self.__dict__['_sensor_' + sensor_name]

@@ -213,7 +213,7 @@ class ThreadHead(threading.Thread):
         dl.end_timestep()
         self.log_writing = False
 
-        if dl.file_index >= self.log_duration_ms:
+        if dl.file_index * self.dt >= self.log_duration_ms:
             self.stop_logging()
 
     def stop_logging(self):
@@ -282,9 +282,18 @@ class ThreadHead(threading.Thread):
         for head in self.heads.values():
             head.write()
 
-        # If an env is povided, step it one timestep.
+        # If an env is povided, step it.
         if self.env:
-            self.env.step(sleep=sleep)
+            # Step the simulation multiple times if thread_head is running
+            # at a lower frequency.
+            for i in range(int(self.dt/self.env.dt)):
+                # Need to apply the commands at each timestep of the simulation
+                # again.
+                for head in self.heads.values():
+                    head.sim_step()
+
+                # Step the actual simulation.
+                self.env.step(sleep=sleep)
 
         start = time.time()
         self.log_data()
@@ -308,4 +317,4 @@ class ThreadHead(threading.Thread):
     def sim_run(self, timesteps, sleep=False):
         """ Use this method to run the setup for `timesteps` amount of timesteps. """
         for i in range(timesteps):
-            self.run_main_loop()
+            self.run_main_loop(sleep)
