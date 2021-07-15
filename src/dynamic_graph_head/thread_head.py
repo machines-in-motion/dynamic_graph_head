@@ -51,8 +51,7 @@ class ThreadHead(threading.Thread):
         self.timing_logging = np.zeros(self.timing_N)
 
         # Start the websocket thread/server and publish data if requested.
-        self.ws_thread = threading.Thread(target=self.ws_thread_fn)
-        self.ws_thread.start()
+        self.ws_thread = None
 
         # Read data from the heads / shared memory to have it available for the
         # initial utils and safety-controller run.
@@ -165,6 +164,10 @@ class ThreadHead(threading.Thread):
             print('!!! ThreadHead: Already streaming data.')
             return
         self.streaming = True
+
+        if self.ws_thread is None:
+            self.ws_thread = threading.Thread(target=self.ws_thread_fn)
+            self.ws_thread.start()
 
         # If no logging yet, then setup the fields to log.
         if not self.logging:
