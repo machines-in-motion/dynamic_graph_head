@@ -85,4 +85,4 @@ class HoldPDController:
             self.des_position = self.zero_pos
 
         self.tau = self.Kp * (self.des_position - self.joint_positions) - self.Kd * self.joint_velocities
-        thread_head.head.set_control('ctrl_joint_torques', self.tau)
+        self.head.set_control('ctrl_joint_torques', self.tau)
