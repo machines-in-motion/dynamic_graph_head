@@ -187,7 +187,7 @@ class ThreadHead(threading.Thread):
         if self.logging:
             print('ThreadHead: Already logging data.')
             return
-        self.log_duration_ms = log_duration_s * 1000
+        self.log_duration_s = log_duration_s
 
         # If no logging yet, then setup the fields to log.
         if not self.streaming:
@@ -219,7 +219,7 @@ class ThreadHead(threading.Thread):
         dl.end_timestep()
         self.log_writing = False
 
-        if dl.file_index * self.dt >= self.log_duration_ms:
+        if dl.file_index * self.dt >= self.log_duration_s:
             self.stop_logging()
 
     def stop_logging(self):
