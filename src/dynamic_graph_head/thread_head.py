@@ -6,6 +6,7 @@ Copyright note valid unless otherwise stated in individual files.
 All rights reserved.
 """
 
+import os, os.path
 import time
 import numpy as np
 import traceback
@@ -228,13 +229,15 @@ class ThreadHead(threading.Thread):
 
         self.logging = False
 
-        # If there are logs written to the fiel right now, wait a bit to finish
+        # If there are logs written to the file right now, wait a bit to finish
         # the current logging iteration.
         if self.log_writing:
-            time.sleep(0.1)
+            time.sleep(10 * self.dt)
 
         self.data_logger.close_file()
-        print('!!! ThreadHead: Stop logging to file "%s".' % (self.data_logger.filepath))
+        abs_filepath = os.path.abspath(self.data_logger.filepath)
+        print('!!! ThreadHead: Stop logging to file "%s".' % (abs_filepath))
+        return abs_filepath
 
 
     def plot_timing(self):
@@ -312,7 +315,7 @@ class ThreadHead(threading.Thread):
     def run(self):
         """ Use this method to start running the main loop in a thread. """
         self.run_loop = True
-        next_time = time.time() + self. dt
+        next_time = time.time() + self.dt
         while self.run_loop:
             if time.time() >= next_time:
                 next_time += self.dt
