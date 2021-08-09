@@ -88,6 +88,8 @@ class ThreadHead(threading.Thread):
                 ctrl.run(self)
 
             self.active_controllers = controllers
+        except KeyboardInterrupt as exp:
+            raise exp
         except:
             traceback.print_exc()
             print('!!! ThreadHead: Error during controller warmup & run -> Switching to safety controller.')
@@ -265,6 +267,8 @@ class ThreadHead(threading.Thread):
         try:
             for (name, util) in self.utils:
                 util.update(self)
+        except KeyboardInterrupt as exp:
+            raise exp
         except:
             traceback.print_exc()
             print('!!! Error with running util "%s" -> Switching to safety controller.' % (name))
@@ -277,6 +281,8 @@ class ThreadHead(threading.Thread):
         try:
             for ctrl in self.active_controllers:
                 ctrl.run(self)
+        except KeyboardInterrupt as exp:
+            raise exp
         except:
             traceback.print_exc()
             print('!!! ThreadHead: Error with running controller -> Switching to safety controller.')
