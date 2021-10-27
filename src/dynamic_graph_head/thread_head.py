@@ -6,6 +6,7 @@ Copyright note valid unless otherwise stated in individual files.
 All rights reserved.
 """
 
+import os, os.path
 import time
 import numpy as np
 import traceback
@@ -87,6 +88,8 @@ class ThreadHead(threading.Thread):
                 ctrl.run(self)
 
             self.active_controllers = controllers
+        except KeyboardInterrupt as exp:
+            raise exp
         except:
             traceback.print_exc()
             print('!!! ThreadHead: Error during controller warmup & run -> Switching to safety controller.')
@@ -187,7 +190,7 @@ class ThreadHead(threading.Thread):
         if self.logging:
             print('ThreadHead: Already logging data.')
             return
-        self.log_duration_ms = log_duration_s * 1000
+        self.log_duration_s = log_duration_s
 
         # If no logging yet, then setup the fields to log.
         if not self.streaming:
@@ -219,7 +222,7 @@ class ThreadHead(threading.Thread):
         dl.end_timestep()
         self.log_writing = False
 
-        if dl.file_index * self.dt >= self.log_duration_ms:
+        if dl.file_index * self.dt >= self.log_duration_s:
             self.stop_logging()
 
     def stop_logging(self):
@@ -228,13 +231,15 @@ class ThreadHead(threading.Thread):
 
         self.logging = False
 
-        # If there are logs written to the fiel right now, wait a bit to finish
+        # If there are logs written to the file right now, wait a bit to finish
         # the current logging iteration.
         if self.log_writing:
-            time.sleep(0.1)
+            time.sleep(10 * self.dt)
 
         self.data_logger.close_file()
-        print('!!! ThreadHead: Stop logging to file "%s".' % (self.data_logger.filepath))
+        abs_filepath = os.path.abspath(self.data_logger.filepath)
+        print('!!! ThreadHead: Stop logging to file "%s".' % (abs_filepath))
+        return abs_filepath
 
 
     def plot_timing(self):
@@ -265,6 +270,8 @@ class ThreadHead(threading.Thread):
         try:
             for (name, util) in self.utils:
                 util.update(self)
+        except KeyboardInterrupt as exp:
+            raise exp
         except:
             traceback.print_exc()
             print('!!! Error with running util "%s" -> Switching to safety controller.' % (name))
@@ -277,6 +284,8 @@ class ThreadHead(threading.Thread):
         try:
             for ctrl in self.active_controllers:
                 ctrl.run(self)
+        except KeyboardInterrupt as exp:
+            raise exp
         except:
             traceback.print_exc()
             print('!!! ThreadHead: Error with running controller -> Switching to safety controller.')
@@ -312,7 +321,7 @@ class ThreadHead(threading.Thread):
     def run(self):
         """ Use this method to start running the main loop in a thread. """
         self.run_loop = True
-        next_time = time.time() + self. dt
+        next_time = time.time() + self.dt
         while self.run_loop:
             if time.time() >= next_time:
                 next_time += self.dt
