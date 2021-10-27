@@ -183,7 +183,7 @@ class ThreadHead(threading.Thread):
 
         print('!!! ThreadHead: Stop streaming data.')
 
-    def start_logging(self, log_duration_s=30):
+    def start_logging(self, log_duration_s=30, log_filename=None):
         if self.logging:
             print('ThreadHead: Already logging data.')
             return
@@ -193,7 +193,10 @@ class ThreadHead(threading.Thread):
         if not self.streaming:
             self.init_log_stream_fields()
 
-        self.data_logger = DataLogger(time.strftime("%Y-%m-%d_%H-%M-%S") + '.mds')
+        if not log_filename:
+            log_filename = time.strftime("%Y-%m-%d_%H-%M-%S") + '.mds'
+
+        self.data_logger = DataLogger(log_filename)
 
         for name, meta in self.fields_access.items():
             meta['log_id'] = self.data_logger.add_field(name, meta['size'])
