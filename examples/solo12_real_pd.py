@@ -1,4 +1,3 @@
-# This a demo to test the ilqr for 2d point mass
 import numpy as np
 
 from dynamic_graph_head import ThreadHead, HoldPDController
