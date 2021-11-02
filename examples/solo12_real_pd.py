@@ -21,7 +21,7 @@ print(head.get_sensor('slider_positions'))
 hold_pd_controller = HoldPDController(head, 3., 0.05, with_sliders=True)
 
 thread_head = ThreadHead(
-    0.002,
+    0.001, # Run controller at 1000 Hz.
     hold_pd_controller,
     head,
     []
