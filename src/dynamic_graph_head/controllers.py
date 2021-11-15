@@ -75,6 +75,10 @@ class HoldPDController:
                 if i >= 2:
                     sliders_out[2 * i + 0] *= -1
                     sliders_out[2 * i + 1] *= -1
+        elif self.joint_positions.shape[0] == 2:  #  teststand
+            slider_A = sliders[0]
+            sliders_out[0] = slider_A
+            sliders_out[1] = 2. * (1. - slider_A)
         return sliders_out
 
     def run(self, thread_head):
