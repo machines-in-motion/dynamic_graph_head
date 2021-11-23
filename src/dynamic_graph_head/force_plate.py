@@ -37,8 +37,8 @@ class SimForcePlate:
         self.history = {}
         for i, obj in enumerate(self.objects):
             self.history[obj] = {
-                'contact_forces': np.zeros((length, self._robot.nb_ee, 6)),
-                'contact_status': np.zeros((length, self._robot.nb_ee))
+                'contact_forces': np.zeros((length, obj.nb_ee, 6)),
+                'contact_status': np.zeros((length, obj.nb_ee))
             } 
 
     def update_noise_data(self, noise_data_std={}):
