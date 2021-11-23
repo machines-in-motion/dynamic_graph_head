@@ -40,7 +40,7 @@ class SimHead:
         if not robot.useFixedBase:
             # Simulated IMU.
             self._sensor_imu_gyroscope = np.zeros(3)
-
+            self._sensor_imu_accelerometer = np.zeros(3)
             # Utility for vicon class.
             self._sensor__vicon_base_position = np.zeros(7)
             self._sensor__vicon_base_velocity = np.zeros(6)
@@ -60,6 +60,9 @@ class SimHead:
             self._noise_data_std['base_velocity'] = np.zeros(self.nj)
         if not 'imu_gyroscope' in noise_data_std:
             self._noise_data_std['imu_gyroscope'] = np.zeros(3)
+        if not 'imu_accelerometer' in noise_data_std:
+            self._noise_data_std['imu_accelerometer'] = np.zeros(3)
+
 
     def update_control_delay(self, delay_dt):
         self._fill_history_control = True
@@ -82,7 +85,7 @@ class SimHead:
         self._history_measurements = {
             'joint_positions': np.zeros((length, self.nj)),
             'joint_velocities': np.zeros((length, self.nj)),
-
+            'imu_accelerometer': np.zeros((length, 3)),
             'imu_gyroscope': np.zeros((length, 3))
         }
 
@@ -105,10 +108,10 @@ class SimHead:
             # Write to the measurement history with noise.
             history['joint_positions'][write_idx] = q[7:]
             history['joint_velocities'][write_idx] = dq[6:]
-            history['imu_gyroscope'][write_idx] = dq[3:6]
-
+            history['imu_gyroscope'][write_idx] = self._robot.get_base_imu_angvel()#dq[3:6]
+            history['imu_accelerometer'][write_idx] = self._robot.get_base_imu_linacc() #self.imu_accelerometer()
             self._sensor_imu_gyroscope[:] = history['imu_gyroscope'][read_idx]
-
+            self._sensor_imu_accelerometer[:] = history['imu_accelerometer'][read_idx]
             self._sensor__vicon_base_position[:] = q[:7]
             self._sensor__vicon_base_velocity[:] = dq[:6]
         else:
