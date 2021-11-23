@@ -6,6 +6,7 @@ Copyright note valid unless otherwise stated in individual files.
 All rights reserved.
 """
 
+from os import write
 import numpy as np
 
 class SimHead:
@@ -44,7 +45,9 @@ class SimHead:
             # Utility for vicon class.
             self._sensor__vicon_base_position = np.zeros(7)
             self._sensor__vicon_base_velocity = np.zeros(6)
-
+            # Utility for force plate. 
+            self._sensor__force_plate_force = np.zeros((self._robot.nb_ee, 6))
+            self._sensor__force_plate_status = np.zeros(self._robot.nb_ee)
         # Controls.
         self._control_ctrl_joint_torques = np.zeros(nj)
 
@@ -86,7 +89,7 @@ class SimHead:
             'joint_positions': np.zeros((length, self.nj)),
             'joint_velocities': np.zeros((length, self.nj)),
             'imu_accelerometer': np.zeros((length, 3)),
-            'imu_gyroscope': np.zeros((length, 3))
+            'imu_gyroscope': np.zeros((length, 3)), 
         }
 
     def sample_noise(self, entry):
@@ -108,12 +111,22 @@ class SimHead:
             # Write to the measurement history with noise.
             history['joint_positions'][write_idx] = q[7:]
             history['joint_velocities'][write_idx] = dq[6:]
-            history['imu_gyroscope'][write_idx] = self._robot.get_base_imu_angvel()#dq[3:6]
-            history['imu_accelerometer'][write_idx] = self._robot.get_base_imu_linacc() #self.imu_accelerometer()
+            history['imu_gyroscope'][write_idx] = self._robot.get_base_imu_angvel()
+            history['imu_accelerometer'][write_idx] = self._robot.get_base_imu_linacc() 
             self._sensor_imu_gyroscope[:] = history['imu_gyroscope'][read_idx]
             self._sensor_imu_accelerometer[:] = history['imu_accelerometer'][read_idx]
             self._sensor__vicon_base_position[:] = q[:7]
             self._sensor__vicon_base_velocity[:] = dq[:6]
+
+            # only read forces for free floating for now 
+            act_cnt, cnt_frc = self._robot.get_force()
+            for i, cnt_id in enumerate(self._robot.end_eff_ids):
+                if cnt_id in act_cnt: 
+                    j = act_cnt.index(cnt_id)
+                    self._sensor__force_plate_force[i,:] = cnt_frc[j,:]
+                    self._sensor__force_plate_status[i] = 1 
+
+
         else:
             if self._joint_index:
                 history['joint_positions'][write_idx] = q[self._joint_index]

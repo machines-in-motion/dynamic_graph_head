@@ -12,6 +12,6 @@ from .thread_head import ThreadHead
 
 # Sensors.
 from .vicon import Vicon, SimVicon
-
+from .force_plate import SimForcePlate
 # Basic controllers.
 from .controllers import ZeroTorquesController, HoldPDController
