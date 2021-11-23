@@ -117,7 +117,6 @@ class SimHead:
             self._sensor_imu_accelerometer[:] = history['imu_accelerometer'][read_idx]
             self._sensor__vicon_base_position[:] = q[:7]
             self._sensor__vicon_base_velocity[:] = dq[:6]
-
             # only read forces for free floating for now 
             act_cnt, cnt_frc = self._robot.get_force()
             for i, cnt_id in enumerate(self._robot.end_eff_ids):
@@ -151,7 +150,7 @@ class SimHead:
 
         history = self._history_control
         history['ctrl_joint_torques'][write_idx] = self._control_ctrl_joint_torques
-
+        
         self._last_ctrl_joint_torques = history['ctrl_joint_torques'][read_idx]
         self._ti += 1
 
