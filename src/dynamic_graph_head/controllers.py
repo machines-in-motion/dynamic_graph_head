@@ -84,7 +84,6 @@ class HoldPDController:
 
             for i in range(2):
                 sliders_out[3 * i + 0] = slider_A 
-                
                 sliders_out[3 * i + 1] = slider_B 
                 sliders_out[3 * i + 2] = 1. - slider_B 
 
