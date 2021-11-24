@@ -41,6 +41,7 @@ class HoldPDController:
         if self.with_sliders:
             self.slider_zero_pos = self.map_sliders(self.slider_positions)
 
+
     def go_zero(self):
         # TODO: Make this an interpolation.
         self.zero_pos = np.zeros_like(self.zero_pos)
@@ -50,6 +51,7 @@ class HoldPDController:
 
     def map_sliders(self, sliders):
         sliders_out = np.zeros_like(self.joint_positions)
+        
         if self.joint_positions.shape[0] == 12:  # solo12
             slider_A = sliders[0]
             slider_B = sliders[1]
@@ -75,10 +77,23 @@ class HoldPDController:
                 if i >= 2:
                     sliders_out[2 * i + 0] *= -1
                     sliders_out[2 * i + 1] *= -1
+        
+        elif self.joint_positions.shape[0] == 6:  # bolt
+            slider_A = sliders[0]
+            slider_B = sliders[1]
+
+            for i in range(2):
+                sliders_out[3 * i + 0] = slider_A 
+                sliders_out[3 * i + 1] = slider_B 
+                sliders_out[3 * i + 2] = 1. - slider_B 
+
+            sliders_out[3] *= -1
+
         elif self.joint_positions.shape[0] == 2:  #  teststand
             slider_A = sliders[0]
             sliders_out[0] = slider_A
             sliders_out[1] = 2. * (1. - slider_A)
+
         return sliders_out
 
     def run(self, thread_head):
