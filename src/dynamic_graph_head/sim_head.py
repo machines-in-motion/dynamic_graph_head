@@ -117,7 +117,7 @@ class SimHead:
             self._sensor__vicon_base_position[:] = q[:7]
             self._sensor__vicon_base_velocity[:] = dq[:6]
             # only read forces for free floating for now 
-            contact_status, contact_forces = self._robot.get_force()
+            contact_status, contact_forces = self._robot.end_effector_forces()
             for i, cnt_id in enumerate(self._robot.pinocchio_endeff_ids):
                 self._sensor__force_plate_force[i,:] = contact_forces[i][:]
                 self._sensor__force_plate_status[i] = contact_status[i] 
