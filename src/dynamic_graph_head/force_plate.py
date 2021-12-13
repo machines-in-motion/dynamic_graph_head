@@ -21,18 +21,14 @@ class SimForcePlate:
         """ 
         self.objects = objects 
         self.update_delay(delay_dt)
-        self.update_noise_data(noise_data_std)
-
+        # self.update_noise_data(noise_data_std)
         self.use_delay = True
         self.use_noise_model = True
-
 
     def update_delay(self, delay_dt): 
         self.delay_dt = delay_dt
         length = delay_dt + 1
-
         self.fill_history = True
-
         # For each object, setup a hisotry for contact forces and active contact status
         self.history = {}
         for i, obj in enumerate(self.objects):
@@ -42,8 +38,7 @@ class SimForcePlate:
             } 
 
     def update_noise_data(self, noise_data_std={}):
-        #TODO: Force Plate Noise Not Implemented yet 
-        pass 
+        raise NotImplementedError("update_noise_data method not implemented yet!")
 
     def update(self, thread_head):
         history = self.history
