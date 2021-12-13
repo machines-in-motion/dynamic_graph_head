@@ -6,7 +6,6 @@ Copyright note valid unless otherwise stated in individual files.
 All rights reserved.
 """
 
-from os import write
 import numpy as np
 
 class SimHead:
@@ -122,8 +121,6 @@ class SimHead:
             for i, cnt_id in enumerate(self._robot.pinocchio_endeff_ids):
                 self._sensor__force_plate_force[i,:] = contact_forces[i][:]
                 self._sensor__force_plate_status[i] = contact_status[i] 
-
-
         else:
             if self._joint_index:
                 history['joint_positions'][write_idx] = q[self._joint_index]

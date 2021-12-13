@@ -13,7 +13,7 @@ import pinocchio as pin
 
 
 class SimForcePlate:
-    def __init__(self, objects, delay_dt=0, noise_data_std={}):
+    def __init__(self, objects, delay_dt=0):
         """
         Args:
             objects: list of PinBulletWrapper objects
