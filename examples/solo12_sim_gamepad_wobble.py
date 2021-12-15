@@ -3,7 +3,9 @@ an EKF is added on top to estimate the contact and base state, the motion will b
 for the controller this means that end effector commands will never change 
 i.e. always active contacts and feet at the same initial configuration 
 
-
+LeftJoystickY: pitch 
+LeftJoystickX: roll 
+RightJoystickX : yaw 
  """ 
 
 
@@ -23,7 +25,7 @@ from mim_control_cpp import CentroidalImpedanceController
 import threading 
 import math 
 #________ GamePad Thread ________#
-gamepad_values = np.zeros(2)
+gamepad_values = np.zeros(3)
 
 MAX_TRIG_VAL = math.pow(2, 8)
 MAX_JOY_VAL = math.pow(2, 15)
@@ -41,51 +43,13 @@ def gamepad_thread_fn():
         events = get_gamepad()
         for event in events:
             if event.ev_type == "Absolute":
-                if event.code == "ABS_X":
-                    gamepad_values[0] = event.state / 32768.0
-                elif event.code == "ABS_Y":
-                    gamepad_values[1] = event.state / -32768.0
+                if event.code == 'ABS_Y':
+                    gamepad_values[0] = event.state / MAX_JOY_VAL # normalize between -1 and 1
+                elif event.code == 'ABS_X':
+                    gamepad_values[1] = event.state / MAX_JOY_VAL # normalize between -1 and 1
+                elif event.code == 'ABS_RX':
+                    gamepad_values[2] = event.state / MAX_JOY_VAL # normalize between -1 and 1
 
-            if event.code == 'ABS_Y':
-                LeftJoystickY = event.state / MAX_JOY_VAL # normalize between -1 and 1
-            elif event.code == 'ABS_X':
-                LeftJoystickX = event.state / MAX_JOY_VAL # normalize between -1 and 1
-            elif event.code == 'ABS_RY':
-                RightJoystickY = event.state / MAX_JOY_VAL # normalize between -1 and 1
-            elif event.code == 'ABS_RX':
-                RightJoystickX = event.state / MAX_JOY_VAL # normalize between -1 and 1
-            elif event.code == 'ABS_Z':
-               LeftTrigger = event.state / MAX_TRIG_VAL # normalize between 0 and 1
-            elif event.code == 'ABS_RZ':
-                RightTrigger = event.state / MAX_TRIG_VAL # normalize between 0 and 1
-            elif event.code == 'BTN_TL':
-                LeftBumper = event.state
-            elif event.code == 'BTN_TR':
-                RightBumper = event.state
-            elif event.code == 'BTN_SOUTH':
-                A = event.state
-            elif event.code == 'BTN_NORTH':
-                X = event.state
-            elif event.code == 'BTN_WEST':
-                Y = event.state
-            elif event.code == 'BTN_EAST':
-                B = event.state
-            elif event.code == 'BTN_THUMBL':
-                LeftThumb = event.state
-            elif event.code == 'BTN_THUMBR':
-                RightThumb = event.state
-            elif event.code == 'BTN_SELECT':
-                Back = event.state
-            elif event.code == 'BTN_START':
-                Start = event.state
-            elif event.code == 'BTN_TRIGGER_HAPPY1':
-                LeftDPad = event.state
-            elif event.code == 'BTN_TRIGGER_HAPPY2':
-                RightDPad = event.state
-            elif event.code == 'BTN_TRIGGER_HAPPY3':
-                UpDPad = event.state
-            elif event.code == 'BTN_TRIGGER_HAPPY4':
-                DownDPad = event.state
 
 
 class CentroidalControlWithGamePad:
