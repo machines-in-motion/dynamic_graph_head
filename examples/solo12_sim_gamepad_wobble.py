@@ -5,7 +5,10 @@ i.e. always active contacts and feet at the same initial configuration
 
 LeftJoystickY: pitch 
 LeftJoystickX: roll 
-RightJoystickX : yaw 
+RightJoystickX : yaw
+
+The com reference will remain fixed around that of the original q0 from Solo12Config
+
  """ 
 
 
@@ -53,13 +56,12 @@ def gamepad_thread_fn():
 
 
 class CentroidalControlWithGamePad:
-    def __init__(self, head, vicon_name, robot, Kp, Kd, q0, v0, log_path=None):
+    def __init__(self, head, vicon_name, robot, q0, v0, log_path=None):
         #________ PD Parameters ________#
         self.head = head
         self.scale = np.pi
-        self.Kp = Kp
-        self.Kd = Kd
         self.q0 = q0 
+        # self.q0[2] -= .012
         self.v0 = v0
         self.d = 0. 
         self.t = 0 
@@ -69,8 +71,15 @@ class CentroidalControlWithGamePad:
         self.robot_config = Solo12Config() 
         self.pin_robot = self.robot_config.buildRobotWrapper()
         self.vicon_name = vicon_name
-        self.contact_names = []
         self.contact_names = self.robot_config.end_effector_names
+
+
+        #________ Reference CoM & Feet Positions ________#
+        self.com_ref = pin.centerOfMass(self.pin_robot.model, self.pin_robot.data, self.q0)
+        pin.framesForwardKinematics(self.pin_robot.model, self.pin_robot.data, self.q0)
+        self.contact_positions = np.zeros(len(self.contact_names)*3)
+        for i, name in enumerate(self.contact_names):
+            self.contact_positions[3*i:3*i+3] = self.pin_robot.data.oMf[self.pin_robot.model.getFrameId(name)].translation 
 
         #________ Data Logs ________#
         self.tau = np.zeros(self.pin_robot.nv-6)
@@ -225,7 +234,7 @@ class CentroidalControlWithGamePad:
         self.c_sim[:] = thread.force_plate.get_contact_status(self.robot)
         # self.contact_status_flags[:] = [True if ci > 0.7 else False for ci in self.c_sim]
 
-    def get_command_state(self, thread):
+    def get_desired_state(self, thread):
         """ reads gamepad input and maps it to desired state, 
         
         
@@ -238,7 +247,12 @@ class CentroidalControlWithGamePad:
             f_vel: desired end effector velocites 
 
         """
-        raise NotImplementedError("method not implemented yet")
+        # rotation_matrix =  pin.rpy.rpyToMatrix(gamepad_values)
+        # quaternion = pin.Quaternion(rotation_matrix).coeffs()     
+
+        quaternion = self.q0[3:7]
+
+        return self.com_ref, np.zeros(3), quaternion, np.zeros(3), self.contact_positions, np.zeros(3*len(self.contact_names))
 
     def run(self, thread):
         #________ read vicon, encoders, imu and force plate from Simulation ________#
@@ -264,21 +278,23 @@ class CentroidalControlWithGamePad:
 
         #________ Read Game Pad & construct Desired State ________#
 
-        commands = self.get_command_state(thread)
+        commands = self.get_desired_state(thread)
 
+        com_position = pin.centerOfMass(self.pin_robot.model, self.pin_robot.data, self.q_sim)
+        quat = pin.Quaternion(self.q_sim[3:7])
         #________ Run Actual Controller ________#
         self.controller.run(
             self.q_sim, self.v_sim,  # state feedback either actual or estimated 
             np.array([1., 1., 1., 1.]),  # active contacts 
-            commands[0], # center of mass position 
-            commands[1], # desired center of mass position 
-            quat.toRotationMatrix().dot(dq[:3]), # center of mass velocity in world frame 
-            commands[2], # desired center of mass velocity in world frame 
-            q[3:7], # base orientation 
-            commands[3], # desired base orientation 
-            dq[3:6], # base angular velocity 
-            commands[4], # desired base angular velocity 
-            commands[5], commands[6] # desired end effector positions and velocities 
+            com_position, # actual center of mass position 
+            commands[0], # desired center of mass position 
+            quat.toRotationMatrix().dot(self.v_sim[:3]), # center of mass velocity in world frame 
+            commands[1], # desired center of mass velocity in world frame 
+            self.q_sim[3:7], # base orientation 
+            commands[2], # desired base orientation as a quaternion (4d vector)
+            self.v_sim[3:6], # base angular velocity 
+            commands[3], # desired base angular velocity 
+            commands[4], commands[5] # desired end effector positions and velocities 
         )
 
         self.tau[:] = self.controller.get_joint_torques()
@@ -322,35 +338,24 @@ if __name__ == "__main__":
         bullet_env # Environment to step.
     )
 
-    path = 'solutions/ddp'
-    xs = np.load(path+'_xs.npy')
-    us = np.load(path+'_us.npy')
-    feedback = np.load(path+'_K.npy')
-
-    q0 = xs[0][:pin_robot.nq]
-    v0 = xs[0][pin_robot.nq:]
-    log_path = os.path.abspath('../log_files')
-    log_path = None 
-    print("logging path is ", log_path )
-
-
     #________ Centroidal Controller ________#
+    log_path = None 
     controller = CentroidalControlWithGamePad(head, 'solo12/solo12', 
-                                    robot, 3., 0.05, q0, v0, log_path) 
+                                    robot, Solo12Config.q0, Solo12Config.v0, log_path) 
     
-    thread_head.head.reset_state(q0, v0)
-    thread_head.switch_controllers(controller)
+    thread_head.head.reset_state(Solo12Config.q0, Solo12Config.v0)
+    # thread_head.switch_controllers(controller)
 
-    if log_path is None:
-        thread_head.start_streaming()
-        thread_head.start_logging()
+    # if log_path is None:
+    #     thread_head.start_streaming()
+    #     thread_head.start_logging()
 
     thread_head.sim_run(10000)
 
-    if log_path is None:
-        thread_head.stop_streaming()
-        thread_head.stop_logging()
-    else:
-        controller.logger.close_file()
-    # Plot timing information.
+    # if log_path is None:
+    #     thread_head.stop_streaming()
+    #     thread_head.stop_logging()
+    # else:
+    #     controller.logger.close_file()
+    # # Plot timing information.
     # thread_head.plot_timing() 
