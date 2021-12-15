@@ -279,15 +279,15 @@ class CentroidalControlWithGamePad:
         quat = pin.Quaternion(self.q_sim[3:7])
         #________ Run Actual Controller ________#
         self.controller.run(
-            self.q_sim, self.v_sim,  # state feedback either actual or estimated 
+            self.q_est, self.v_est,  # state feedback either actual or estimated 
             np.array([1., 1., 1., 1.]),  # active contacts 
             com_position, # actual center of mass position 
             commands[0], # desired center of mass position 
-            quat.toRotationMatrix().dot(self.v_sim[:3]), # center of mass velocity in world frame 
+            quat.toRotationMatrix().dot(self.v_est[:3]), # center of mass velocity in world frame 
             commands[1], # desired center of mass velocity in world frame 
-            self.q_sim[3:7], # base orientation 
+            self.q_est[3:7], # base orientation 
             commands[2], # desired base orientation as a quaternion (4d vector)
-            self.v_sim[3:6], # base angular velocity 
+            self.v_est[3:6], # base angular velocity 
             commands[3], # desired base angular velocity 
             commands[4], commands[5] # desired end effector positions and velocities 
         )
