@@ -47,11 +47,11 @@ def gamepad_thread_fn():
         for event in events:
             if event.ev_type == "Absolute":
                 if event.code == 'ABS_Y':
-                    gamepad_values[0] = event.state / MAX_JOY_VAL # normalize between -1 and 1
+                    gamepad_values[1] = .5 * event.state / MAX_JOY_VAL # normalize between -1 and 1
                 elif event.code == 'ABS_X':
-                    gamepad_values[1] = event.state / MAX_JOY_VAL # normalize between -1 and 1
+                    gamepad_values[0] = .5 * event.state / MAX_JOY_VAL # normalize between -1 and 1
                 elif event.code == 'ABS_RX':
-                    gamepad_values[2] = event.state / MAX_JOY_VAL # normalize between -1 and 1
+                    gamepad_values[2] = .5 * event.state / MAX_JOY_VAL # normalize between -1 and 1
 
 
 
@@ -61,7 +61,7 @@ class CentroidalControlWithGamePad:
         self.head = head
         self.scale = np.pi
         self.q0 = q0 
-        # self.q0[2] -= .012
+        self.q0[2] -= .012
         self.v0 = v0
         self.d = 0. 
         self.t = 0 
@@ -77,9 +77,10 @@ class CentroidalControlWithGamePad:
         #________ Reference CoM & Feet Positions ________#
         self.com_ref = pin.centerOfMass(self.pin_robot.model, self.pin_robot.data, self.q0)
         pin.framesForwardKinematics(self.pin_robot.model, self.pin_robot.data, self.q0)
-        self.contact_positions = np.zeros(len(self.contact_names)*3)
+        self.contact_positions = np.zeros(len(self.contact_names)*7)
         for i, name in enumerate(self.contact_names):
-            self.contact_positions[3*i:3*i+3] = self.pin_robot.data.oMf[self.pin_robot.model.getFrameId(name)].translation 
+            self.contact_positions[7*i:7*i+3] = self.pin_robot.data.oMf[self.pin_robot.model.getFrameId(name)].translation 
+            self.contact_positions[7*i+6] = 1.
 
         #________ Data Logs ________#
         self.tau = np.zeros(self.pin_robot.nv-6)
@@ -102,20 +103,20 @@ class CentroidalControlWithGamePad:
     
         #________ initialze impendace controller ________#
         mu = 0.2
-        kc = np.array([200, 200, 200])
-        dc = np.array([50, 50, 50])
-        kb = np.array([100, 100, 200])
-        db = np.array([50.0, 50.0, 200.0])
+        kc = np.array([100., 100., 100.]) 
+        dc = np.array( [15., 15., 15.]) 
+        kb = np.array([25, 25, 25]) 
+        db = np.array([22.5, 22.5, 22.5]) 
         qp_penalty_weights = np.array([5e5, 5e5, 5e5, 1e6, 1e6, 1e6])
         # impedance gains
-        kp = np.array([200, 200, 200, 0, 0, 0])
-        kd = np.array([10.0, 10.0, 10.0, 0, 0, 0])        
+        kp = np.array([50, 50, 50, 0, 0, 0])
+        kd = np.array([.7, .7, .7, 0, 0, 0])        
 
         self.controller = CentroidalImpedanceController()
         self.controller.initialize(
             2.5,
             np.diag(self.pin_robot.mass(self.q0)[3:6, 3:6]),
-            pin_robot.model,
+            self.pin_robot.model,
             "universe",
             self.robot_config.end_effector_names,
             mu,
@@ -145,7 +146,6 @@ class CentroidalControlWithGamePad:
         self.imu_gyroscope = head.get_sensor('imu_gyroscope')
         self.imu_accelerometer = head.get_sensor('imu_accelerometer')
         # self.observed_torques = head.get_sensor('joint_torques')
-
 
         #________ start gamepad thread ________#
         gamepad_thread = threading.Thread(target=gamepad_thread_fn)
@@ -219,7 +219,7 @@ class CentroidalControlWithGamePad:
         return sliders_out
 
     def warmup(self, thread):
-        self.zero_pos = self.map_sliders(self.slider_positions)
+        # self.zero_pos = self.map_sliders(self.slider_positions)
         thread.vicon.bias_position(self.vicon_name)
 
     def get_base(self, thread):
@@ -236,8 +236,6 @@ class CentroidalControlWithGamePad:
 
     def get_desired_state(self, thread):
         """ reads gamepad input and maps it to desired state, 
-        
-        
         returns:
             p_com: desired center of mass position 
             v_com: desired center of mass velocity
@@ -247,12 +245,9 @@ class CentroidalControlWithGamePad:
             f_vel: desired end effector velocites 
 
         """
-        # rotation_matrix =  pin.rpy.rpyToMatrix(gamepad_values)
-        # quaternion = pin.Quaternion(rotation_matrix).coeffs()     
-
-        quaternion = self.q0[3:7]
-
-        return self.com_ref, np.zeros(3), quaternion, np.zeros(3), self.contact_positions, np.zeros(3*len(self.contact_names))
+        rotation_matrix =  pin.rpy.rpyToMatrix(gamepad_values)
+        quaternion = pin.Quaternion(rotation_matrix).coeffs()     
+        return self.com_ref, np.zeros(3), quaternion, np.zeros(3), self.contact_positions, np.zeros(6*len(self.contact_names))
 
     def run(self, thread):
         #________ read vicon, encoders, imu and force plate from Simulation ________#
@@ -325,11 +320,13 @@ if __name__ == "__main__":
 
     p.resetDebugVisualizerCamera(1.6, 50, -35, (0.0, 0.0, 0.0))
     p.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
+
     #________ Initialze Thread ________#
     head = SimHead(robot, vicon_name='solo12')
+    safety_controller = HoldPDController(head, 3., 0.05, False)
     thread_head = ThreadHead(
         0.001, # dt.
-        HoldPDController(head, 3., 0.05, True), # Safety controllers.
+        safety_controller, # Safety controllers.
         head, # Heads to read / write from.
         [     # Utils.
             ('vicon', SimVicon(['solo12/solo12'])),
@@ -340,17 +337,27 @@ if __name__ == "__main__":
 
     #________ Centroidal Controller ________#
     log_path = None 
+
+    q0 = Solo12Config.q0.copy()
+    q0[0] = 0. 
+    v0 =  Solo12Config.v0.copy()
+
     controller = CentroidalControlWithGamePad(head, 'solo12/solo12', 
-                                    robot, Solo12Config.q0, Solo12Config.v0, log_path) 
+                                    robot, q0, v0, log_path) 
+
+    safety_controller.zero_pos = q0[7:]
     
-    thread_head.head.reset_state(Solo12Config.q0, Solo12Config.v0)
+    thread_head.head.reset_state(q0, v0)
     # thread_head.switch_controllers(controller)
 
     # if log_path is None:
     #     thread_head.start_streaming()
     #     thread_head.start_logging()
 
-    thread_head.sim_run(10000)
+    thread_head.sim_run(500)
+    print("Switching Controller")
+    thread_head.switch_controllers(controller)
+    thread_head.sim_run(100000)
 
     # if log_path is None:
     #     thread_head.stop_streaming()
