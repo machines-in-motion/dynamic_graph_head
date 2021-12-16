@@ -56,7 +56,7 @@ def gamepad_thread_fn():
 
 
 class CentroidalControlWithGamePad:
-    def __init__(self, head, vicon_name, robot, q0, v0, log_path=None):
+    def __init__(self, head, vicon_name, q0, v0, log_path=None, sim_forces=False):
         #________ PD Parameters ________#
         self.head = head
         self.scale = np.pi
@@ -65,9 +65,9 @@ class CentroidalControlWithGamePad:
         self.v0 = v0
         self.d = 0. 
         self.t = 0 
+        self.sim_forces = False # activates force readings from simulation
 
         #________ Robot Parameters ________#
-        self.robot = robot
         self.robot_config = Solo12Config() 
         self.pin_robot = self.robot_config.buildRobotWrapper()
         self.vicon_name = vicon_name
@@ -90,10 +90,10 @@ class CentroidalControlWithGamePad:
         self.v_est = np.zeros(self.pin_robot.nv)
         self.x_sim = np.zeros(self.pin_robot.nq+ self.pin_robot.nv)
         self.x_est = np.zeros(self.pin_robot.nq+ self.pin_robot.nv)
-        self.f_sim = np.zeros([self.robot.nb_ee,6])
-        self.f_est = np.zeros([self.robot.nb_ee,6])
-        self.c_sim = np.zeros(self.robot.nb_ee)
-        self.c_est = np.zeros(self.robot.nb_ee)    
+        self.f_sim = np.zeros([self.robot_config.nb_ee,6])
+        self.f_est = np.zeros([self.robot_config.nb_ee,6])
+        self.c_sim = np.zeros(self.robot_config.nb_ee)
+        self.c_est = np.zeros(self.robot_config.nb_ee)    
         self.u_applied = np.zeros(self.pin_robot.nv-6)
         self.u_observed = np.zeros(self.pin_robot.nv-6)
         self.imu_linacc_sim = np.zeros(3)
@@ -129,7 +129,12 @@ class CentroidalControlWithGamePad:
         estimator_settings = RobotStateEstimatorSettings()
         estimator_settings.is_imu_frame = False
         estimator_settings.pinocchio_model = self.pin_robot.model
-        estimator_settings.imu_in_base = pin.SE3(self.robot.rot_base_to_imu.T, self.robot.r_base_to_imu)
+
+        # IMU pose offset in base frame
+        self.rot_base_to_imu = np.identity(3)
+        self.r_base_to_imu = np.array([0.10407, -0.00635, 0.01540])
+
+        estimator_settings.imu_in_base = pin.SE3(self.rot_base_to_imu.T, self.r_base_to_imu)
         estimator_settings.end_effector_frame_names = (self.robot_config.end_effector_names)
         estimator_settings.urdf_path = self.robot_config.urdf_path
         robot_weight_per_ee = self.robot_config.mass * 9.81 / 4
@@ -155,7 +160,7 @@ class CentroidalControlWithGamePad:
         self.abs_log_path = None 
         if log_path is not None:
             self.abs_log_path = log_path 
-            self.logger_file_name = str(self.abs_log_path+"/sim_sliderpd_"
+            self.logger_file_name = str(self.abs_log_path+"/real_wobble_"
                         +deepcopy(time.strftime("%Y_%m_%d_%H_%M_%S")) + ".mds")
             self.logger = DataLogger(self.logger_file_name)
             # Input the data fields.
@@ -174,7 +179,7 @@ class CentroidalControlWithGamePad:
             self.est_forces = {}
             self.sim_contacts = {}
             self.est_contacts = {}
-            for ee in self.robot.end_effector_names:
+            for ee in self.robot_config.end_effector_names:
                 self.sim_forces[ee] = self.logger.add_field("sim_" + ee + "_force", 6)
                 self.est_forces[ee] = self.logger.add_field("est_" + ee + "_force", 6)
                 self.sim_contacts[ee] = self.logger.add_field("sim_" + ee + "_contact", 1)
@@ -195,7 +200,7 @@ class CentroidalControlWithGamePad:
         self.logger.log(self.est_imu_angvel, self.imu_angvel_est)
         self.logger.log(self.applied_u, self.u_applied)
         self.logger.log(self.observed_u, self.u_observed)
-        for i, ee in enumerate(self.robot.end_effector_names):
+        for i, ee in enumerate(self.robot_config.end_effector_names):
             self.logger.log(self.sim_forces[ee],self.f_sim[i])
             self.logger.log(self.est_forces[ee],self.f_est[i])
             self.logger.log(self.sim_contacts[ee], self.c_sim[i])
@@ -258,8 +263,9 @@ class CentroidalControlWithGamePad:
         self.x_sim[self.pin_robot.nq:] = self.v_sim
         self.imu_linacc_sim[:] = self.imu_accelerometer.copy()
         self.imu_angvel_sim[:] = self.imu_gyroscope.copy()  
-        self.read_forces(thread)
-        self.read_contact_status(thread)
+        # if self.sim_forces:
+        #     self.read_forces(thread)
+        #     self.read_contact_status(thread)
         #________ Compute updated estimate from EKF ________#
         self.estimator.run(self.imu_linacc_sim, self.imu_angvel_sim, 
                            self.q_sim[7:], self.v_sim[6:], self.tau)
@@ -279,15 +285,15 @@ class CentroidalControlWithGamePad:
         quat = pin.Quaternion(self.q_sim[3:7])
         #________ Run Actual Controller ________#
         self.controller.run(
-            self.q_est, self.v_est,  # state feedback either actual or estimated 
+            self.q_sim, self.v_sim,  # state feedback either actual or estimated 
             np.array([1., 1., 1., 1.]),  # active contacts 
             com_position, # actual center of mass position 
             commands[0], # desired center of mass position 
-            quat.toRotationMatrix().dot(self.v_est[:3]), # center of mass velocity in world frame 
+            quat.toRotationMatrix().dot(self.v_sim[:3]), # center of mass velocity in world frame 
             commands[1], # desired center of mass velocity in world frame 
-            self.q_est[3:7], # base orientation 
+            self.q_sim[3:7], # base orientation 
             commands[2], # desired base orientation as a quaternion (4d vector)
-            self.v_est[3:6], # base angular velocity 
+            self.v_sim[3:6], # base angular velocity 
             commands[3], # desired base angular velocity 
             commands[4], commands[5] # desired end effector positions and velocities 
         )
@@ -302,10 +308,10 @@ class CentroidalControlWithGamePad:
             self.log_data()
 
         #________ Increment Counter ________# 
-        self.d += 0.1 
-        if (self.d - 1.)**2 <= 1.e-8:
-            self.d = 0. 
-            self.t += 1 
+        # self.d += 0.1 
+        # if (self.d - 1.)**2 <= 1.e-8:
+        #     self.d = 0. 
+        #     self.t += 1 
 
         thread.head.set_control('ctrl_joint_torques', self.tau)
 
@@ -343,7 +349,7 @@ if __name__ == "__main__":
     v0 =  Solo12Config.v0.copy()
 
     controller = CentroidalControlWithGamePad(head, 'solo12/solo12', 
-                                    robot, q0, v0, log_path) 
+                                    q0, v0, log_path) 
 
     safety_controller.zero_pos = q0[7:]
     
