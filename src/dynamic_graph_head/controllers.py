@@ -165,9 +165,22 @@ class HoldOnBoardPDController(BaseHoldPDController):
         self.head.set_control("ctrl_joint_position_gains", kp_array)
         self.head.set_control("ctrl_joint_velocity_gains", kd_array)
 
+        self._sensor_msgs_last_print = 0
+
     def run(self, thread_head):
         self.des_position = self.get_desired_position()
         des_velocity = np.zeros_like(self.des_position)
 
         self.head.set_control("ctrl_joint_positions", self.des_position)
         self.head.set_control("ctrl_joint_velocities", des_velocity)
+
+        sensor_msg_sent = self.head.get_sensor("sent_sensor_messages")
+        sensor_msg_lost = self.head.get_sensor("lost_sensor_messages")
+
+        if sensor_msg_sent - self._sensor_msgs_last_print > 1000:
+            print(
+                "Lost {}/{} sensor messages".format(
+                    sensor_msg_lost, sensor_msg_sent
+                )
+            )
+            self._sensor_msgs_last_print = sensor_msg_sent
