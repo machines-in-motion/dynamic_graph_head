@@ -9,6 +9,8 @@ import abc
 
 import numpy as np
 
+from .connection_quality import PacketLossAnalyser
+
 
 class ZeroTorquesController:
     def __init__(self, head):
@@ -165,7 +167,7 @@ class HoldOnBoardPDController(BaseHoldPDController):
         self.head.set_control("ctrl_joint_position_gains", kp_array)
         self.head.set_control("ctrl_joint_velocity_gains", kd_array)
 
-        self._sensor_msgs_last_print = 0
+        self._packet_loss_analyser = PacketLossAnalyser(1.0, 10)
 
     def run(self, thread_head):
         self.des_position = self.get_desired_position()
@@ -174,13 +176,15 @@ class HoldOnBoardPDController(BaseHoldPDController):
         self.head.set_control("ctrl_joint_positions", self.des_position)
         self.head.set_control("ctrl_joint_velocities", des_velocity)
 
-        sensor_msg_sent = self.head.get_sensor("sent_sensor_messages")
-        sensor_msg_lost = self.head.get_sensor("lost_sensor_messages")
+        commands_msg_sent = self.head.get_sensor("num_sent_command_packets")[0]
+        commands_msg_lost = self.head.get_sensor("num_lost_command_packets")[0]
+        sensor_msg_sent = self.head.get_sensor("num_sent_sensor_packets")[0]
+        sensor_msg_lost = self.head.get_sensor("num_lost_sensor_packets")[0]
 
-        if sensor_msg_sent - self._sensor_msgs_last_print > 1000:
-            print(
-                "Lost {}/{} sensor messages".format(
-                    sensor_msg_lost, sensor_msg_sent
-                )
-            )
-            self._sensor_msgs_last_print = sensor_msg_sent
+        if self._packet_loss_analyser.update(
+                commands_msg_sent,
+                commands_msg_lost,
+                sensor_msg_sent,
+                sensor_msg_lost
+        ):
+            print(self._packet_loss_analyser)
