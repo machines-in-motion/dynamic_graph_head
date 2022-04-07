@@ -329,6 +329,15 @@ class ThreadHead(threading.Thread):
             else:
                 time.sleep(0.0001)
 
+    def sim_run_timed(self, timesteps):
+        next_time = time.time() + self.dt
+        for i in range(timesteps):
+            if time.time() >= next_time:
+                next_time += self.dt
+                self.run_main_loop()
+            else:
+                time.sleep(0.0001)
+
     def sim_run(self, timesteps, sleep=False):
         """ Use this method to run the setup for `timesteps` amount of timesteps. """
         for i in range(timesteps):
