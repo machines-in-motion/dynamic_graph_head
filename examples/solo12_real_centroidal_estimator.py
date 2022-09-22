@@ -2,7 +2,7 @@ import pinocchio
 import numpy as np
 from pathlib import Path
 
-# import dynamic_graph_manager_cpp_bindings
+import dynamic_graph_manager_cpp_bindings
 from dynamic_graph_head import ThreadHead, Vicon, SimHead, SimVicon, HoldPDController, StateEstimator
 
 from mim_control_cpp import CentroidalImpedanceController
@@ -193,13 +193,14 @@ def run_simulation():
     head = SimHead(robot, vicon_name='solo12')
 
     # Create the controllers
-    hold_pd_controller = HoldPDController(head, 3., 0.05, with_sliders=False)
+    hold_pd_controller = HoldPDController(head, 3.0, 0.05, with_sliders=False)
 
     centroidal_ctrl = EstimatorCentroidalController(head, 'solo12/solo12', 0.6, 50.0, 0.9,
     [200., 200., 200.], [15., 15., 15.], [25., 25., 25.], [22.5, 22.5, 22.5],
     )
 
-    file_path = Path.home() / "project" / "trajectory" / "solo12_trot_long.npz"
+    # Include the path for the desired trajectory file here
+    file_path = Path.home() / "data" / "trajectory" / "solo12_trot.npz"
     centroidal_ctrl_replay = EstimatorCentroidalControllerReplay(head, 'solo12/solo12', 0.6, 50.0, 0.9,
     [200., 200., 200.], [15., 15., 15.], [25., 25., 25.], [22.5, 22.5, 22.5], file_path
     )
@@ -245,7 +246,7 @@ def run_simulation():
 
 if __name__ == "__main__":
     # Run the simulation.
-    run_simulation()
+    # run_simulation()
 
     # Run on the real robot.
     # Create the dgm communication.
@@ -258,7 +259,8 @@ if __name__ == "__main__":
     [200., 200., 200.], [25., 15., 15.], [20., 30., 22.], [4, 10, 10],
     )
 
-    file_path = Path.home() / "project" / "trajectory" / "solo12_trot_long.npz"
+    # Include the path for the desired trajectory file here
+    file_path = Path.home() / "data" / "trajectory" / "solo12_trot.npz"
     centroidal_ctrl_replay = EstimatorCentroidalControllerReplay(head, 'solo12/solo12', 0.2, 50., 0.9,
     [200., 200., 200.], [25., 15., 15.], [20., 30., 22.], [4, 10, 10], file_path,
     )
