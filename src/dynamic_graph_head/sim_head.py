@@ -31,6 +31,7 @@ class SimHead:
         self.nj = nj
         self._sensor_joint_positions = np.zeros(nj)
         self._sensor_joint_velocities = np.zeros(nj)
+        self._sensor_joint_accelerations = np.zeros(nj)
 
         self.with_sliders = with_sliders
         if self.with_sliders:
@@ -112,6 +113,10 @@ class SimHead:
             # Write to the measurement history with noise.
             history['joint_positions'][write_idx] = q[7:]
             history['joint_velocities'][write_idx] = dq[6:]
+            if(write_idx==0):
+                history['joint_accelerations'][write_idx] = np.zeros_like(dq[6:])
+            else:
+                history['joint_accelerations'][write_idx] = (dq[6:] - history['joint_velocities'][write_idx-1])/self._measurement_delay_dt
             history['imu_gyroscope'][write_idx] = self._robot.get_base_imu_angvel()
             history['imu_accelerometer'][write_idx] = self._robot.get_base_imu_linacc() 
             self._sensor_imu_gyroscope[:] = history['imu_gyroscope'][read_idx]
