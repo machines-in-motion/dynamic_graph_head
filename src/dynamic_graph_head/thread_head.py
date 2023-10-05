@@ -17,6 +17,8 @@ import datetime
 import json
 import websockets
 import threading
+import signal
+import sys
 
 from mim_data_utils import DataLogger, DataReader
 import matplotlib.pylab as plt
@@ -27,7 +29,7 @@ class ThreadHead(threading.Thread):
 
         self.dt = dt
         self.env = env
-
+        
         if type(heads) != dict:
             self.head = heads # Simple-edge-case for single head setup.
             self.heads = {
@@ -133,13 +135,13 @@ class ThreadHead(threading.Thread):
         self.streaming_event_loop.run_until_complete(self.websocket_server)
         self.streaming_event_loop.run_forever()
 
-    def init_log_stream_fields(self, LOG_FIELDS=None):
+    def init_log_stream_fields(self, LOG_FIELDS=['all']):
         fields = []
         fields_access = {}
         for i, ctrl in enumerate(self.active_controllers):
             ctrl_dict = ctrl.__dict__
             for key, value in ctrl_dict.items():
-                if(key in LOG_FIELDS):
+                if(key in LOG_FIELDS or LOG_FIELDS==['all']):
                     # Support only single-dim numpy arrays and scalar only.
                     if type(value) == float or type(value) == int:
                         field_size = 1
@@ -196,7 +198,7 @@ class ThreadHead(threading.Thread):
 
         print('!!! ThreadHead: Stop streaming data.')
 
-    def start_logging(self, log_duration_s=30, log_filename=None, LOG_FIELDS=None):
+    def start_logging(self, log_duration_s=30, log_filename=None, LOG_FIELDS=['all']):
         if self.logging:
             print('ThreadHead: Already logging data.')
             return
@@ -204,7 +206,7 @@ class ThreadHead(threading.Thread):
 
         # If no logging yet, then setup the fields to log.
         if not self.streaming:
-            self.init_log_stream_fields(LOG_FIELDS)
+            self.init_log_stream_fields(LOG_FIELDS=LOG_FIELDS)
 
         if not log_filename:
             log_filename = time.strftime("%Y-%m-%d_%H-%M-%S") + '.mds'
@@ -259,11 +261,16 @@ class ThreadHead(threading.Thread):
         self.data_logger.close_file()
         abs_filepath = os.path.abspath(self.data_logger.filepath)
         print('!!! ThreadHead: Stop logging to file "%s".' % (abs_filepath))
+        
+        # Optionally generate timing plots when user presses ctrl+c key
+        print('\n Press Ctrl+C to plot the timings [FIRST MAKE SURE THE ROBOT IS AT REST OR IN A SAFETY MODE] \n')
+        print(' Only works if thread_head.plot_timing() is called in the main \n')
         return abs_filepath
 
 
     def plot_timing(self):
-        input("Press any key to plot the timings")
+        signal.signal(signal.SIGINT, lambda sig, frame : print("\n")) 
+        signal.pause()
         r = DataReader(self.log_filename)
         N = r.data['absolute_time'].shape[0]
         clock_time = np.linspace(self.dt, N * self.dt, N) 
@@ -275,15 +282,18 @@ class ThreadHead(threading.Thread):
         axes[3].plot((r.data['timing_utils'] + r.data['timing_control'] + r.data['timing_logging']) * 1000)
         axes[4].plot((r.data['absolute_time'][1:] - r.data['absolute_time'][:-1])* 1000)
         axes[5].plot(absolute_time_to_clock * 1000)
-        for ax, title in zip(axes, ['Utils', 'Control', 'Logging', 'Total Computation', 'Cycle Duration', "Absolute Time - Clock Time"]):
+        for ax, title in zip(axes, ['Utils', 'Control', 'Logging', 'Total Computation', 'Cycle Duration', "Cumulative Delay (Absolute Time - Clock Time)"]):
             ax.grid(True)
             ax.set_title(title)
             ax.set_ylabel('Duration [ms]')
-            if title != "Absolute Time - Clock Time":
-                ax.axhline(1., color='black')
+            if title != "Cumulative Delay (Absolute Time - Clock Time)":
+                ax.axhline(1000*self.dt, color='black')
             else:
                 ax.axhline(0., color='black')
+        signal.signal(signal.SIGINT, lambda sig, frame : sys.exit(0)) 
+        print('\n Press Ctrl+C again to close the timing plots and exit. \n')
         plt.show()
+        signal.pause()
 
     def run_main_loop(self, sleep=False):
         self.absolute_time = time.time() - self.time_start_recording
@@ -359,17 +369,19 @@ class ThreadHead(threading.Thread):
                 time.sleep(np.core.umath.maximum(-t, 0.00001))
 
 
-    def sim_run_timed(self, timesteps):
+    def sim_run_timed(self, total_sim_time):
+        self.run_loop = True
         self.time_start_recording = time.time()
         next_time = self.dt
-        for _ in range(timesteps):
+        while self.run_loop:
             t = time.time() - self.time_start_recording - next_time
             if t >= 0:
                 self.run_main_loop()
                 next_time += self.dt
             else:
                 time.sleep(np.core.umath.maximum(-t, 0.00001))
-                
+            if(next_time >= total_sim_time):
+                self.run_loop = False
                 
     def sim_run(self, timesteps, sleep=False):
         """ Use this method to run the setup for `timesteps` amount of timesteps. """
