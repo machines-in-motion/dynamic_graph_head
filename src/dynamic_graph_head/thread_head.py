@@ -17,8 +17,10 @@ import datetime
 import json
 import websockets
 import threading
+import signal
+import sys
 
-from mim_data_utils import DataLogger
+from mim_data_utils import DataLogger, DataReader
 import matplotlib.pylab as plt
 
 class ThreadHead(threading.Thread):
@@ -27,7 +29,7 @@ class ThreadHead(threading.Thread):
 
         self.dt = dt
         self.env = env
-
+        
         if type(heads) != dict:
             self.head = heads # Simple-edge-case for single head setup.
             self.heads = {
@@ -46,11 +48,12 @@ class ThreadHead(threading.Thread):
         self.logging = False
         self.log_writing = False
 
-        self.timing_N = 20000
-        self.timing_control = np.zeros(self.timing_N)
-        self.timing_utils = np.zeros(self.timing_N)
-        self.timing_logging = np.zeros(self.timing_N)
-
+        self.timing_control = 0. 
+        self.timing_utils   = 0. 
+        self.timing_logging = 0. 
+        self.absolute_time  = 0. 
+        self.time_start_recording = 0.
+        
         # Start the websocket thread/server and publish data if requested.
         self.ws_thread = None
 
@@ -132,36 +135,45 @@ class ThreadHead(threading.Thread):
         self.streaming_event_loop.run_until_complete(self.websocket_server)
         self.streaming_event_loop.run_forever()
 
-    def init_log_stream_fields(self):
+    def init_log_stream_fields(self, LOG_FIELDS=['all']):
         fields = []
         fields_access = {}
         for i, ctrl in enumerate(self.active_controllers):
             ctrl_dict = ctrl.__dict__
             for key, value in ctrl_dict.items():
-                # Support only single-dim numpy arrays and scalar only.
-                if type(value) == float or type(value) == int:
-                    field_size = 1
-                elif type(value) == np.ndarray and value.ndim == 1:
-                    field_size = value.shape[0]
-                else:
-                    print("  Not logging '%s' as field type '%s' is unsupported" % (
-                        key, str(type(value))))
-                    continue
+                if(key in LOG_FIELDS or LOG_FIELDS==['all']):
+                    # Support only single-dim numpy arrays and scalar only.
+                    if type(value) == float or type(value) == int:
+                        field_size = 1
+                    elif type(value) == np.ndarray and value.ndim == 1:
+                        field_size = value.shape[0]
+                    else:
+                        print("  Not logging '%s' as field type '%s' is unsupported" % (
+                            key, str(type(value))))
+                        continue
 
-                if len(self.active_controllers) == 1:
-                    name = key
-                else:
-                    name = 'ctrl%02d.%s' % (i, key)
-                fields.append(name)
-                fields_access[name] = {
-                    'ctrl': ctrl,
-                    'key': key,
-                    'size': field_size
-                }
-
+                    if len(self.active_controllers) == 1:
+                        name = key
+                    else:
+                        name = 'ctrl%02d.%s' % (i, key)
+                    fields.append(name)
+                    fields_access[name] = {
+                        'ctrl': ctrl,
+                        'key': key,
+                        'size': field_size
+                    }
+                    
         self.fields = fields
         self.fields_access = fields_access
-
+        
+        # init timings logs 
+        self.fields_timings                         = ['timing_utils', 'timing_control', 'timing_logging']
+        self.fields_access_timing                   = {}
+        self.fields_access_timing['timing_utils']   = {'ctrl' : self, 'key' : 'timing_utils', 'size' : 1}
+        self.fields_access_timing['timing_control'] = {'ctrl' : self, 'key' : 'timing_control', 'size' : 1}
+        self.fields_access_timing['timing_logging'] = {'ctrl' : self, 'key' : 'timing_logging', 'size' : 1}
+        self.fields_access_timing['absolute_time']  = {'ctrl' : self, 'key' : 'absolute_time', 'size' : 1}
+        
     def start_streaming(self):
         if self.streaming:
             print('!!! ThreadHead: Already streaming data.')
@@ -175,7 +187,7 @@ class ThreadHead(threading.Thread):
         # If no logging yet, then setup the fields to log.
         if not self.logging:
             self.init_log_stream_fields()
-
+        
         print('!!! ThreadHead: Start streaming data.')
 
     def stop_streaming(self):
@@ -186,7 +198,7 @@ class ThreadHead(threading.Thread):
 
         print('!!! ThreadHead: Stop streaming data.')
 
-    def start_logging(self, log_duration_s=30, log_filename=None):
+    def start_logging(self, log_duration_s=30, log_filename=None, LOG_FIELDS=['all']):
         if self.logging:
             print('ThreadHead: Already logging data.')
             return
@@ -194,15 +206,22 @@ class ThreadHead(threading.Thread):
 
         # If no logging yet, then setup the fields to log.
         if not self.streaming:
-            self.init_log_stream_fields()
+            self.init_log_stream_fields(LOG_FIELDS=LOG_FIELDS)
 
         if not log_filename:
             log_filename = time.strftime("%Y-%m-%d_%H-%M-%S") + '.mds'
 
         self.data_logger = DataLogger(log_filename)
-
+        self.log_filename = log_filename
+        
         for name, meta in self.fields_access.items():
             meta['log_id'] = self.data_logger.add_field(name, meta['size'])
+        
+        # log timings
+        self.fields_access_timing['timing_utils']['log_id']   = self.data_logger.add_field('timing_utils', self.fields_access_timing['timing_utils']['size'])
+        self.fields_access_timing['timing_control']['log_id'] = self.data_logger.add_field('timing_control', self.fields_access_timing['timing_control']['size'])
+        self.fields_access_timing['timing_logging']['log_id'] = self.data_logger.add_field('timing_logging', self.fields_access_timing['timing_logging']['size'])
+        self.fields_access_timing['absolute_time']['log_id']  = self.data_logger.add_field('absolute_time', self.fields_access_timing['absolute_time']['size'])
 
         print('!!! ThreadHead: Start logging to file "%s" for %0.2f seconds.' % (
             self.data_logger.filepath, log_duration_s))
@@ -218,6 +237,9 @@ class ThreadHead(threading.Thread):
         dl = self.data_logger
         dl.begin_timestep()
         for name, meta in self.fields_access.items():
+            dl.log(meta['log_id'], meta['ctrl'].__dict__[meta['key']])
+        # add timings
+        for name, meta in self.fields_access_timing.items():
             dl.log(meta['log_id'], meta['ctrl'].__dict__[meta['key']])
         dl.end_timestep()
         self.log_writing = False
@@ -239,28 +261,43 @@ class ThreadHead(threading.Thread):
         self.data_logger.close_file()
         abs_filepath = os.path.abspath(self.data_logger.filepath)
         print('!!! ThreadHead: Stop logging to file "%s".' % (abs_filepath))
+        
+        # Optionally generate timing plots when user presses ctrl+c key
+        print('\n Press Ctrl+C to plot the timings [FIRST MAKE SURE THE ROBOT IS AT REST OR IN A SAFETY MODE] \n')
+        print(' Only works if thread_head.plot_timing() is called in the main \n')
         return abs_filepath
 
 
     def plot_timing(self):
-        fix, axes = plt.subplots(4, sharex=True, figsize=(8, 10))
-
-        axes[0].plot(self.timing_utils * 1000)
-        axes[1].plot(self.timing_control * 1000)
-        axes[2].plot(self.timing_logging * 1000)
-        axes[3].plot((self.timing_utils + self.timing_control + self.timing_logging) * 1000)
-
-        for ax, title in zip(axes, ['Util', 'Control', 'Logging', 'Total Duration']):
+        signal.signal(signal.SIGINT, lambda sig, frame : print("\n")) 
+        signal.pause()
+        r = DataReader(self.log_filename)
+        N = r.data['absolute_time'].shape[0]
+        clock_time = np.linspace(self.dt, N * self.dt, N) 
+        absolute_time_to_clock = r.data['absolute_time'].reshape(-1) - clock_time
+        fix, axes = plt.subplots(6, sharex=True, figsize=(8, 12))
+        axes[0].plot(r.data['timing_utils'] * 1000)
+        axes[1].plot(r.data['timing_control'] * 1000)
+        axes[2].plot(r.data['timing_logging'] * 1000)
+        axes[3].plot((r.data['timing_utils'] + r.data['timing_control'] + r.data['timing_logging']) * 1000)
+        axes[4].plot((r.data['absolute_time'][1:] - r.data['absolute_time'][:-1])* 1000)
+        axes[5].plot(absolute_time_to_clock * 1000)
+        for ax, title in zip(axes, ['Utils', 'Control', 'Logging', 'Total Computation', 'Cycle Duration', "Cumulative Delay (Absolute Time - Clock Time)"]):
             ax.grid(True)
-            ax.set_ylabel('Duration [ms]')
             ax.set_title(title)
-            ax.axhline(1., color='red')
-
+            ax.set_ylabel('Duration [ms]')
+            if title != "Cumulative Delay (Absolute Time - Clock Time)":
+                ax.axhline(1000*self.dt, color='black')
+            else:
+                ax.axhline(0., color='black')
+        signal.signal(signal.SIGINT, lambda sig, frame : sys.exit(0)) 
+        print('\n Press Ctrl+C again to close the timing plots and exit. \n')
         plt.show()
+        signal.pause()
 
     def run_main_loop(self, sleep=False):
-        timing_N = self.timing_N
-
+        self.absolute_time = time.time() - self.time_start_recording
+        
         # Read data from the heads / shared memory.
         for head in self.heads.values():
             head.read()
@@ -277,7 +314,7 @@ class ThreadHead(threading.Thread):
             print('!!! Error with running util "%s" -> Switching to safety controller.' % (name))
             self.switch_controllers(self.safety_controllers)
 
-        self.timing_utils[self.ti % timing_N] = time.time() - start
+        self.timing_utils = time.time() - start
 
         # Run the active contollers.
         start = time.time()
@@ -291,7 +328,7 @@ class ThreadHead(threading.Thread):
             print('!!! ThreadHead: Error with running controller -> Switching to safety controller.')
             self.switch_controllers(self.safety_controllers)
 
-        self.timing_control[self.ti % timing_N] = time.time() - start
+        self.timing_control = time.time() - start
 
         # Write the computed control back to shared memory.
         for head in self.heads.values():
@@ -312,7 +349,7 @@ class ThreadHead(threading.Thread):
 
         start = time.time()
         self.log_data()
-        self.timing_logging[self.ti % timing_N] = time.time() - start
+        self.timing_logging = time.time() - start
 
         # No need to call stream_data or similar. The data is picked-up from
         # the websocket processing thread async.
@@ -321,23 +358,31 @@ class ThreadHead(threading.Thread):
     def run(self):
         """ Use this method to start running the main loop in a thread. """
         self.run_loop = True
-        next_time = time.time() + self.dt
+        self.time_start_recording = time.time()
+        next_time = 0.
         while self.run_loop:
-            if time.time() >= next_time:
-                next_time += self.dt
+            t = time.time() - self.time_start_recording - next_time
+            if t >= 0:
                 self.run_main_loop()
-            else:
-                time.sleep(0.0001)
-
-    def sim_run_timed(self, timesteps):
-        next_time = time.time() + self.dt
-        for i in range(timesteps):
-            if time.time() >= next_time:
                 next_time += self.dt
-                self.run_main_loop()
             else:
-                time.sleep(0.0001)
+                time.sleep(np.core.umath.maximum(-t, 0.00001))
 
+
+    def sim_run_timed(self, total_sim_time):
+        self.run_loop = True
+        self.time_start_recording = time.time()
+        next_time = self.dt
+        while self.run_loop:
+            t = time.time() - self.time_start_recording - next_time
+            if t >= 0:
+                self.run_main_loop()
+                next_time += self.dt
+            else:
+                time.sleep(np.core.umath.maximum(-t, 0.00001))
+            if(next_time >= total_sim_time):
+                self.run_loop = False
+                
     def sim_run(self, timesteps, sleep=False):
         """ Use this method to run the setup for `timesteps` amount of timesteps. """
         for i in range(timesteps):

@@ -9,7 +9,7 @@ All rights reserved.
 import numpy as np
 
 class SimHead:
-    def __init__(self, robot, vicon_name='', with_sliders=True, joint_index=None,
+    def __init__(self, robot, vicon_name='', with_sliders=True, with_force_plate=False, joint_index=None,
                  measurement_delay_dt=0, control_delay_dt=0, noise_data_std={}):
         self._robot = robot
         self._vicon_name = vicon_name
@@ -31,6 +31,7 @@ class SimHead:
         self.nj = nj
         self._sensor_joint_positions = np.zeros(nj)
         self._sensor_joint_velocities = np.zeros(nj)
+        self._sensor_joint_accelerations = np.zeros(nj)
 
         self.with_sliders = with_sliders
         if self.with_sliders:
@@ -44,7 +45,9 @@ class SimHead:
             # Utility for vicon class.
             self._sensor__vicon_base_position = np.zeros(7)
             self._sensor__vicon_base_velocity = np.zeros(6)
-            # Utility for force plate. 
+        # Utility for force plate. 
+        self.with_force_plate = with_force_plate
+        if self.with_force_plate:
             self._sensor__force_plate_force = np.zeros((self._robot.nb_ee, 6))
             self._sensor__force_plate_status = np.zeros(self._robot.nb_ee)
         # Controls.
@@ -110,6 +113,10 @@ class SimHead:
             # Write to the measurement history with noise.
             history['joint_positions'][write_idx] = q[7:]
             history['joint_velocities'][write_idx] = dq[6:]
+            if(write_idx==0):
+                history['joint_accelerations'][write_idx] = np.zeros_like(dq[6:])
+            else:
+                history['joint_accelerations'][write_idx] = (dq[6:] - history['joint_velocities'][write_idx-1])/self._measurement_delay_dt
             history['imu_gyroscope'][write_idx] = self._robot.get_base_imu_angvel()
             history['imu_accelerometer'][write_idx] = self._robot.get_base_imu_linacc() 
             self._sensor_imu_gyroscope[:] = history['imu_gyroscope'][read_idx]
@@ -135,6 +142,13 @@ class SimHead:
         if self.with_sliders:
             for i, l in enumerate(['a', 'b', 'c', 'd']):
                 self._sensor_slider_positions[i] = self._robot.get_slider_position(l)
+
+        # Read forces
+        if(self.with_force_plate):
+            contact_status, contact_forces = self._robot.end_effector_forces()
+            for i, cnt_id in enumerate(self._robot.pinocchio_endeff_ids):
+                self._sensor__force_plate_force[i,:] = contact_forces[i][:]
+                self._sensor__force_plate_status[i] = contact_status[i] 
 
     def write(self):
         write_idx = self._ti % (self._measurement_delay_dt + 1)
