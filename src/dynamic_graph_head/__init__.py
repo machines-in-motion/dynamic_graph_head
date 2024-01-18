@@ -16,4 +16,5 @@ from .force_plate import SimForcePlate
 # Basic controllers.
 from .controllers import ZeroTorquesController, HoldPDController
 # Estimator
-from .state_estimator import StateEstimator
+try:
+    from .state_estimator import StateEstimator
