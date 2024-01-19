@@ -18,3 +18,5 @@ from .controllers import ZeroTorquesController, HoldPDController
 # Estimator
 try:
     from .state_estimator import StateEstimator
+except: 
+    pass
